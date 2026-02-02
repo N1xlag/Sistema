@@ -593,7 +593,7 @@ export default function Home() {
             🌱 EcoLlajta Smart-Twin v1.0 • Investigación Operativa II • UMSS 2026
           </p>
           <p className="text-xs text-[var(--text-muted)] mt-1">
-            Desarrollado para el Ing. Miguel Gutiérrez Magne
+            Desarrollado por el grupo Messi
           </p>
         </footer>
       </main>
