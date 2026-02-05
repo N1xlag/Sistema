@@ -61,11 +61,21 @@ export async function checkHealth(): Promise<boolean> {
     }
 }
 
-export async function getOptimization(targetPots: number): Promise<OptimalResourcesResult> {
+export async function getOptimization(
+    targetPots: number,
+    maximizeTrays?: boolean,
+    traySpacing?: number,
+    optimizationMode?: string
+): Promise<OptimalResourcesResult> {
     const response = await fetch(`${API_URL}/api/simulate/optimize`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetPots }),
+        body: JSON.stringify({
+            targetPots,
+            maximizeTrays,
+            traySpacing,
+            optimizationMode
+        }),
     });
 
     if (!response.ok) {

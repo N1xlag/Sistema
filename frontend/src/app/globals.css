@@ -117,6 +117,141 @@ body {
   }
 }
 
+/* Overlay para cerrar sidebar en móvil */
+.sidebar-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 40;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.sidebar-overlay.active {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+/* En desktop, nunca mostrar el overlay */
+@media (min-width: 1025px) {
+  .sidebar-overlay {
+    display: none !important;
+  }
+}
+
+/* ==================== BOTÓN MENÚ FLOTANTE ==================== */
+.mobile-menu-fab {
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--gradient-primary);
+  color: white;
+  font-size: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  cursor: pointer;
+  z-index: 60;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-menu-fab:active {
+  transform: scale(0.92);
+}
+
+.mobile-menu-fab:hover {
+  box-shadow: 0 6px 20px rgba(34, 197, 94, 0.4);
+}
+
+/* Ocultar en tablets y desktop (mayor a 768px) */
+@media (min-width: 768px) {
+  .mobile-menu-fab {
+    display: none !important;
+  }
+}
+
+/* ==================== MEJORAS TÁCTILES ==================== */
+/* Eliminar highlight azul en taps móviles */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Tamaño mínimo para elementos táctiles (44px recomendado por Apple) */
+button,
+.btn,
+.nav-item,
+input[type="range"],
+.toggle-container {
+  min-height: 44px;
+  touch-action: manipulation;
+}
+
+/* Mejorar sliders para touch */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 44px;
+  padding: 16px 0;
+  background: transparent;
+  cursor: pointer;
+  touch-action: pan-x;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--accent-primary);
+  cursor: grab;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  border: 3px solid white;
+}
+
+input[type="range"]::-webkit-slider-thumb:active {
+  cursor: grabbing;
+  transform: scale(1.2);
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 8px;
+  background: var(--border-medium);
+  border-radius: 4px;
+}
+
+/* Feedback visual en hover/active para móvil */
+@media (hover: none) and (pointer: coarse) {
+
+  .btn:active,
+  .nav-item:active,
+  .card-stat:active {
+    transform: scale(0.97);
+    opacity: 0.9;
+  }
+
+  /* Desactivar hover effects que no funcionan bien en touch */
+  .card:hover {
+    transform: none;
+  }
+}
+
 /* ==================== CARDS ==================== */
 .card {
   background: var(--gradient-card);

@@ -122,13 +122,26 @@ function optimizeTrayDistribution(potsToPlace, maximizeTrays = false, traysAvail
                 edgeAllocation.push(0);
             }
 
-            // Fase 2: Si aún quedan, agregar al centro/intermedio empezando por bandeja 1
+            // Fase 2: Si aún quedan, agregar AMARILLOS primero a TODAS las bandejas
+            const intermediateAllocation = new Array(edgeAllocation.length).fill(0);
             const centerAllocation = new Array(edgeAllocation.length).fill(0);
+
+            // Primero llenamos AMARILLOS (zona intermedia) de todas las bandejas
             let trayIdx = 0;
             while (tempRemaining > 0 && trayIdx < edgeAllocation.length) {
-                const currentEdge = edgeAllocation[trayIdx];
-                const spaceLeft = CAPACITY_PER_TRAY - currentEdge - centerAllocation[trayIdx];
-                const toAdd = Math.min(tempRemaining, spaceLeft);
+                const spaceForIntermediate = intermediatePositionsPerTray - intermediateAllocation[trayIdx];
+                const toAdd = Math.min(tempRemaining, spaceForIntermediate);
+                intermediateAllocation[trayIdx] += toAdd;
+                tempRemaining -= toAdd;
+                trayIdx++;
+            }
+
+            // Fase 3: Si TODAVÍA quedan, agregar ROJOS (centro) de todas las bandejas
+            const centerPositionsPerTray = CAPACITY_PER_TRAY - edgePositionsPerTray - intermediatePositionsPerTray;
+            trayIdx = 0;
+            while (tempRemaining > 0 && trayIdx < edgeAllocation.length) {
+                const spaceForCenter = centerPositionsPerTray - centerAllocation[trayIdx];
+                const toAdd = Math.min(tempRemaining, spaceForCenter);
                 centerAllocation[trayIdx] += toAdd;
                 tempRemaining -= toAdd;
                 trayIdx++;
@@ -136,22 +149,27 @@ function optimizeTrayDistribution(potsToPlace, maximizeTrays = false, traysAvail
 
             // Crear bandejas con la distribución calculada (solo las que tienen macetas)
             for (let i = 0; i < edgeAllocation.length; i++) {
-                const potsInTray = edgeAllocation[i] + centerAllocation[i];
+                const edgePots = edgeAllocation[i];
+                const intermediatePots = intermediateAllocation[i];
+                const centerPots = centerAllocation[i];
+                const potsInTray = edgePots + intermediatePots + centerPots;
+
                 if (potsInTray === 0) continue; // Saltar bandejas vacías
 
                 const grid = generate3ZoneGrid(potsInTray, GRID_ROWS, GRID_COLS);
 
-                const usesIntermediate = potsInTray > edgePositionsPerTray;
-                const usesCenter = potsInTray > (edgePositionsPerTray + intermediatePositionsPerTray);
+                const usesIntermediate = intermediatePots > 0;
+                const usesCenter = centerPots > 0;
 
                 traysThisCycle.push({
                     trayNumber: traysThisCycle.length + 1,
                     potsCount: potsInTray,
-                    edgePots: Math.min(potsInTray, edgePositionsPerTray),
-                    centerPots: Math.max(0, potsInTray - edgePositionsPerTray),
+                    edgePots: edgePots,
+                    intermediatePots: intermediatePots,
+                    centerPots: centerPots,
                     grid,
                     fillPercentage: ((potsInTray / CAPACITY_PER_TRAY) * 100).toFixed(0) + '%',
-                    edgeOnly: !usesIntermediate,
+                    edgeOnly: !usesIntermediate && !usesCenter,
                     usesIntermediate,
                     usesCenter
                 });
@@ -584,6 +602,8 @@ function generateTrayAlerts(pots, trays, risk, maximizeTrays = false, usesInterm
 }
 
 module.exports = {
-    optimizeTrayDistribution
+    optimizeTrayDistribution,
+    countEdgePositions,
+    countIntermediatePositions
 };
 

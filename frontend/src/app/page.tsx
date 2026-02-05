@@ -58,7 +58,12 @@ export default function Home() {
     try {
       // Si solo hay macetas pero faltan otros datos clave, asumimos modo Planificador
       if (params.targetPots > 0 && (params.hoursAvailable === 0 || params.staffCount === 0 || !params.hoursAvailable)) {
-        const opt = await getOptimization(params.targetPots);
+        const opt = await getOptimization(
+          params.targetPots,
+          params.maximizeTrays,
+          params.traySpacing,
+          params.optimizationMode
+        );
         setOptimization(opt);
         setActiveTab("optimal");
         setResult(null); // Limpiamos resultado anterior para enfocar en la sugerencia
@@ -99,6 +104,13 @@ export default function Home() {
 
   return (
     <div className="app-container">
+      {/* Overlay para cerrar sidebar en móvil */}
+      <div
+        className={`sidebar-overlay ${sidebarOpen ? 'active' : ''}`}
+        onClick={() => setSidebarOpen(false)}
+        aria-hidden="true"
+      />
+
       {/* Sidebar */}
       <aside className={`sidebar ${sidebarOpen ? "open" : ""}`}>
         <div className="logo mb-8">
@@ -118,7 +130,10 @@ export default function Home() {
             <div
               key={tab.id}
               className={`nav-item ${activeTab === tab.id ? "active" : ""}`}
-              onClick={() => setActiveTab(tab.id as TabType)}
+              onClick={() => {
+                setActiveTab(tab.id as TabType);
+                setSidebarOpen(false); // Cerrar sidebar en móvil al seleccionar
+              }}
             >
               <span className="nav-icon">{tab.icon}</span>
               <span>{tab.label}</span>
@@ -151,28 +166,22 @@ export default function Home() {
           </div>
         </div>
 
-        {/* API Status */}
-        <div className="mt-6">
-          <div
-            className={`status-indicator ${apiStatus ? "online" : "offline"}`}
-          >
-            <div className="status-dot" />
-            <span>{apiStatus ? "API Conectada" : "API Desconectada"}</span>
-          </div>
-        </div>
       </aside>
 
       {/* Main Content */}
       <main className="main-content">
+        {/* Botón hamburguesa flotante para móvil */}
+        <button
+          className="mobile-menu-fab lg:hidden"
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          aria-label="Abrir menú"
+        >
+          {sidebarOpen ? '✕' : '☰'}
+        </button>
+
         {/* Header */}
         <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-          <div>
-            <button
-              className="btn-ghost lg:hidden mb-2"
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-            >
-              ☰
-            </button>
+          <div className="text-center md:text-left">
             <h1 className="text-3xl md:text-4xl font-extrabold">
               <span className="text-gradient">Simulador de Producción</span>
             </h1>
@@ -484,7 +493,7 @@ export default function Home() {
           <div className="mt-6 flex flex-col md:flex-row gap-4">
             <button
               onClick={handleSimulate}
-              disabled={loading || !apiStatus}
+              disabled={loading}
               className="btn btn-primary flex-1"
             >
               {loading ? (

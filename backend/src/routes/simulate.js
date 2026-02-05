@@ -207,11 +207,16 @@ router.post('/full', (req, res) => {
  */
 router.post('/optimize', (req, res) => {
     try {
-        const { targetPots } = req.body;
+        const { targetPots, maximizeTrays, traySpacing, optimizationMode } = req.body;
         if (!targetPots || targetPots < 1) {
             return res.status(400).json({ error: 'Se requiere una meta de macetas válida' });
         }
-        const recommendations = calculateOptimalResources(parseInt(targetPots));
+        const recommendations = calculateOptimalResources(
+            parseInt(targetPots),
+            maximizeTrays,
+            traySpacing ? parseInt(traySpacing) : undefined,
+            optimizationMode
+        );
         res.json(recommendations);
     } catch (error) {
         res.status(500).json({ error: error.message });
