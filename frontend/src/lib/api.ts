@@ -62,24 +62,16 @@ export async function checkHealth(): Promise<boolean> {
 }
 
 export async function getOptimization(
-    targetPots: number,
-    maximizeTrays?: boolean,
-    traySpacing?: number,
-    optimizationMode?: string
+    targetPots: number, 
+    hoursAvailable: number, 
+    grindGrams: number = 1000, 
+    grindMins: number = 20
 ): Promise<OptimalResourcesResult> {
     const response = await fetch(`${API_URL}/api/simulate/optimize`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            targetPots,
-            maximizeTrays,
-            traySpacing,
-            optimizationMode
-        }),
+        body: JSON.stringify({ targetPots, hoursAvailable, grindGrams, grindMins }),
     });
-
-    if (!response.ok) {
-        throw new Error('Error obteniendo optimización');
-    }
+    if (!response.ok) throw new Error('Error obteniendo optimización');
     return response.json();
 }

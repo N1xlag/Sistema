@@ -29,8 +29,11 @@ export default function Home() {
     maximizeTrays: false,
     traysAvailable: 0,
     moldsAvailable: 0,
-    traySpacing: 2,  // 2 = estándar (10 bandejas, 4h), 1 = compacto (16 bandejas, 5h)
+    traySpacing: 2,
     optimizationMode: 'balanced',
+    rendimientoHumano: 1.0,
+    grindGrams: 1000, // <--- NUEVO
+    grindMins: 20,    // <--- NUEVO
   });
 
   const [optimization, setOptimization] = useState<OptimalResourcesResult | null>(null);
@@ -53,45 +56,35 @@ export default function Home() {
 
   // Ejecutar simulación
   // Ejecutar simulación o optimización inteligente
+  // Ejecutar simulación con AUTO-AJUSTE JIT
   const handleSimulate = useCallback(async () => {
     setLoading(true);
     try {
-      // Si solo hay macetas pero faltan otros datos clave, asumimos modo Planificador
-      if (params.targetPots > 0 && (params.hoursAvailable === 0 || params.staffCount === 0 || !params.hoursAvailable)) {
-        const opt = await getOptimization(
-          params.targetPots,
-          params.maximizeTrays,
-          params.traySpacing,
-          params.optimizationMode
-        );
-        setOptimization(opt);
-        setActiveTab("optimal");
-        setResult(null); // Limpiamos resultado anterior para enfocar en la sugerencia
-      } else {
-        // Simulación completa estándar
-        const data = await runFullSimulation(params);
-        setResult(data);
-        if (activeTab === 'optimal') setActiveTab('overview');
-      }
+      // 1. Primero le preguntamos al "Cerebro Planificador" qué necesitamos físicamente
+      // 1. Primero le preguntamos al "Cerebro Planificador" qué necesitamos físicamente
+      const opt = await getOptimization(params.targetPots, params.hoursAvailable, params.grindGrams, params.grindMins);
+      
+      // 2. AUTO-APLICAMOS esas recomendaciones al Panel de Control en vivo
+      const optimizedParams = {
+        ...params,
+        moldsAvailable: opt.tools.molds,
+        // Garantizamos mínimo 4 personas por estación de trabajo para que la fábrica no colapse
+        staffCount: Math.max(params.staffCount, opt.tools.stations * 4)
+      };
+      
+      setParams(optimizedParams); // Se mueven los sliders solitos
+
+      // 3. Corremos la simulación completa usando los datos ya optimizados
+      const data = await runFullSimulation(optimizedParams);
+      
+      setResult(data);
+      setOptimization(opt);
+      
     } catch (error) {
       console.error("Error operativo:", error);
     }
     setLoading(false);
-  }, [params, activeTab]);
-
-  // Funciones auxiliares para aplicar optimización
-  const applyOptStaff = () => {
-    if (optimization) setParams(p => ({ ...p, staffCount: optimization.staff.recommendedFor8h }));
-  };
-  const applyOptTrays = () => {
-    if (optimization) setParams(p => ({ ...p, traysAvailable: optimization.trays.optimal }));
-  };
-  const applyOptMolds = () => {
-    if (optimization) setParams(p => ({ ...p, moldsAvailable: optimization.molds.optimal }));
-  };
-  const applyOptTime = () => {
-    if (optimization) setParams(p => ({ ...p, hoursAvailable: parseFloat(optimization.time.fastestPossible) }));
-  };
+  }, [params]);
 
   // Tabs
   const tabs = [
@@ -376,6 +369,40 @@ export default function Home() {
             </div>
           </div>
 
+          {/* Ritmo de Molienda (Gramos) */}
+            <div className="input-group">
+              <label className="input-label">⚙️ Rendimiento Molino (Gramos)</label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="range"
+                  value={params.grindGrams || 1000}
+                  onChange={(e) => setParams({ ...params, grindGrams: Number(e.target.value) })}
+                  className="input-range flex-1"
+                  min={100} max={5000} step={100}
+                />
+                <div className="text-xl font-black text-amber-500 w-16 text-right">
+                  {params.grindGrams || 1000}g
+                </div>
+              </div>
+            </div>
+
+            {/* Tiempo de Molienda (Minutos) */}
+            <div className="input-group">
+              <label className="input-label">⏳ Tiempo Molienda (Minutos)</label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="range"
+                  value={params.grindMins || 20}
+                  onChange={(e) => setParams({ ...params, grindMins: Number(e.target.value) })}
+                  className="input-range flex-1"
+                  min={1} max={60} step={1}
+                />
+                <div className="text-xl font-black text-amber-500 w-16 text-right">
+                  {params.grindMins || 20}m
+                </div>
+              </div>
+            </div>
+
           {/* Opción de optimización de bandejas */}
           <div className="mt-6 p-4 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-light)]">
             <label className="flex items-center gap-3 cursor-pointer">
@@ -637,6 +664,48 @@ export default function Home() {
                   </div>
                 </div>
 
+                {/* Equipamiento Físico Requerido (NUEVO REQUERIMIENTO) */}
+                <div className="card border-emerald-500">
+                  <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
+                    <span>🔧</span>
+                    Equipamiento de Planta Requerido
+                  </h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="text-center p-4 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-light)]">
+                      <div className="text-3xl mb-2">⚙️</div>
+                      <div className="text-xl font-bold text-emerald-500">
+                        {result.staffAllocation.staffAllocation['molienda']?.staff || 0}
+                      </div>
+                      <div className="text-xs text-[var(--text-muted)]">Molinos Trituradores</div>
+                      <div className="text-[10px] text-emerald-600 mt-1">(1 por operario)</div>
+                    </div>
+                    <div className="text-center p-4 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-light)]">
+                      <div className="text-3xl mb-2">⚖️</div>
+                      <div className="text-xl font-bold text-emerald-500">
+                        {result.staffAllocation.staffAllocation['dosificacion']?.staff || 0}
+                      </div>
+                      <div className="text-xs text-[var(--text-muted)]">Balanzas Grameras</div>
+                      <div className="text-[10px] text-emerald-600 mt-1">(1 por operario)</div>
+                    </div>
+                    <div className="text-center p-4 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-light)]">
+                      <div className="text-3xl mb-2">🥣</div>
+                      <div className="text-xl font-bold text-emerald-500">
+                        {result.staffAllocation.staffAllocation['mezclado']?.staff || 0}
+                      </div>
+                      <div className="text-xs text-[var(--text-muted)]">Bowls de Mezcla</div>
+                      <div className="text-[10px] text-emerald-600 mt-1">(1 por operario)</div>
+                    </div>
+                    <div className="text-center p-4 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-light)]">
+                      <div className="text-3xl mb-2">🧱</div>
+                      <div className="text-xl font-bold text-emerald-500">
+                        {params.moldsAvailable || 5}
+                      </div>
+                      <div className="text-xs text-[var(--text-muted)]">Moldes Base</div>
+                      <div className="text-[10px] text-emerald-600 mt-1">(Rotación en vivo)</div>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Alertas */}
                 {result.summary.totalAlerts.length > 0 && (
                   <AlertsPanel alerts={result.summary.totalAlerts} />
@@ -803,13 +872,7 @@ export default function Home() {
 
         {/* Optimal Planner Tab */}
         {activeTab === "optimal" && optimization && (
-          <OptimizationPanel
-            data={optimization}
-            onApplyStaff={applyOptStaff}
-            onApplyTrays={applyOptTrays}
-            onApplyMolds={applyOptMolds}
-            onApplyTime={applyOptTime}
-          />
+          <OptimizationPanel data={optimization} />
         )}
 
         {activeTab === "optimal" && !optimization && (

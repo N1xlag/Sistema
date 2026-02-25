@@ -6,10 +6,10 @@
 const PRODUCTION_CONSTANTS = {
     // Relación de mezcla (Regla de Oro 10:1)
     RATIO: {
-        EGGSHELL_GRAMS: 180,      // gramos de cáscara de huevo por unidad
-        ALGINATE_GRAMS: 18,       // gramos de alginato por unidad
-        WATER_ML: 140,            // mililitros de agua por preparación
-        RATIO_VALUE: 10           // relación 10:1
+        EGGSHELL_GRAMS: 168, // Escenario 5 min
+        ALGINATE_GRAMS: 18,  // Escenario 5 min
+        WATER_ML: 140,       // Escenario 5 min
+        RATIO_VALUE: 9.33    // 168 / 18
     },
 
     // Tiempos del proceso (en minutos)

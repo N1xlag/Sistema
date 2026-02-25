@@ -12,6 +12,8 @@ const CONSTANTS = require('../config/constants');
  */
 function calculateDosage(targetPots) {
     const { RATIO, PERFORMANCE, CONSTRAINTS } = CONSTANTS;
+    const colorantNeeded = targetPots * 2; // 2ml por maceta
+    const varnishNeeded = targetPots * 10; // 10ml por maceta
 
     // Cálculo de materiales
     const eggshellNeeded = targetPots * RATIO.EGGSHELL_GRAMS;
@@ -60,6 +62,14 @@ function calculateDosage(targetPots) {
             },
             oil: {
                 liters: 0.5 * Math.ceil(targetPots / 21)
+            },
+            colorant: {
+                ml: colorantNeeded,
+                liters: (colorantNeeded / 1000).toFixed(2)
+            },
+            varnish: {
+                ml: varnishNeeded,
+                liters: (varnishNeeded / 1000).toFixed(2)
             }
         },
         estimates: {

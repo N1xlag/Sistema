@@ -47,6 +47,8 @@ export interface DosageInputs {
     alginate: { grams: number; bags: number };
     water: { ml: number; liters: string };
     oil: { liters: number };
+    colorant?: { ml: number; liters: string }; // NUEVO
+    varnish?: { ml: number; liters: string };  // NUEVO
 }
 
 export interface DosageEstimates {
@@ -207,36 +209,26 @@ export interface SimulationParams {
     maximizeTrays: boolean;
     traysAvailable: number;
     moldsAvailable: number;
-    traySpacing: 1 | 2; // 1 = compacto (16 bandejas, +1h), 2 = estándar (10 bandejas, 4h)
-    optimizationMode?: 'strict' | 'balanced'; // strict = Solo bordes (no centros), balanced = Minimiza ciclos usando centros si es necesario
+    traySpacing: 1 | 2; 
+    optimizationMode?: 'strict' | 'balanced'; 
+    rendimientoHumano?: number; 
+    grindGrams?: number; // <--- NUEVO
+    grindMins?: number;  // <--- NUEVO
 }
 
 export interface OptimalResourcesResult {
     targetPots: number;
-    trays: {
-        optimal: number;
-        minimum: number;
-        reason: string;
-    };
-    staff: {
-        recommendedFor8h: number;
-        explanation: string;
-    };
-    molds: {
-        optimal: number;
-        minimum: number;
-        reason: string;
+    timeLimit: number;
+    tools: {
+        stations: number;
+        molds: number;
+        bowls: number;
+        scales: number;
+        grinders: number;
     };
     time: {
-        fastestPossible: string;
-        explanation: string;
-        breakdown?: {
-            production: string;
-            productionMinutes?: number;
-            baking: string;
-            bakingMinutes?: number;
-            setup: string;
-            setupMinutes?: number;
-        };
+        realHours: string;
+        cycleMin: number;
+        potsPerCycle: number;
     };
 }

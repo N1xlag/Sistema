@@ -1,122 +1,106 @@
 /**
- * EcoLlajta Smart-Twin - Motor de Asignación de Personal
- * Distribuye al equipo en estaciones según la meta de producción
+ * EcoLlajta Smart-Twin - Motor de Asignación de Personal (Lógica de Grupos Reales)
  */
 
 const CONSTANTS = require('../config/constants');
 
-/**
- * Calcula la distribución óptima de personal
- * @param {number} targetPots - Cantidad de macetas objetivo
- * @param {number} hoursAvailable - Horas de trabajo disponibles
- * @param {number} staffCount - Personal disponible (default: 11)
- * @param {number} moldsAvailable - Moldes disponibles (default: 5)
- * @param {number} customBakingMinutes - Tiempo de horneado personalizado opcional
- * @returns {Object} Distribución de personal y tiempos
- */
 function allocateStaff(targetPots, hoursAvailable, staffCount = 11, moldsAvailable = 5, customBakingMinutes = null) {
-    const { TIMES, PERFORMANCE, STATIONS, CONSTRAINTS, MOLDS } = CONSTANTS;
+    const { TIMES, MOLDS } = CONSTANTS;
     const alerts = [];
 
-    // Ajuste inicial de factor de eficiencia (para debugging/referencia)
-    let efficiencyFactor = 1.0;
-    if (staffCount <= 2) efficiencyFactor = staffCount === 1 ? 3.0 : 2.0;
-    else if (staffCount < 5) efficiencyFactor = 1.5;
-    else if (staffCount > 15) efficiencyFactor = 1.2;
-
-    // Nota: Los tiempos precisos se recalculan más abajo con breakdown.
-
-
-    // Distribución base (proporcional a la carga de trabajo)
-    const workloadDistribution = {
-        molienda: 0.15,      // 15% del esfuerzo
-        dosificacion: 0.10,  // 10% del esfuerzo
-        mezclado: 0.25,      // 25% del esfuerzo
-        moldeado: 0.30,      // 30% del esfuerzo (cuello de botella manual)
-        horneado: 0.10,      // 10% del esfuerzo
-        control: 0.10        // 10% control de calidad
+    // 1. LAS 4 TAREAS CORE (Donde se reparte el grupo de trabajo real)
+    const CORE_STATIONS = {
+        molienda: 0.20,
+        dosificacion: 0.15,
+        mezclado: 0.25,
+        moldeado: 0.40
     };
 
-    // Tasas base por persona (macetas/hora) estimadas
+    // 2. TAREAS POST-PRODUCCIÓN (Solo 1 vigilante asíncrono)
+    const POST_STATIONS = ['horneado', 'control'];
+
     const RATES = {
         molienda: 60,
         dosificacion: 90,
         mezclado: 40,
-        moldeado: 30, // Bottleneck original (~28.9)
+        moldeado: 30, 
         horneado: 100,
         control: 100
     };
 
-    // Calcular personal por estación (o tareas asignadas si es poco personal)
     const allocation = {};
-    let totalAllocated = 0;
+    
+    // Si hay menos de 4 personas, físicamente no pueden cubrir 4 estaciones en paralelo
+    const isSequential = staffCount < 4;
 
-    // Modo de operación: Secuencial (<= 3 staff) o Paralelo (> 3 staff)
-    // El usuario pidió diferenciar visualmente si se hacen a la vez o no.
-    const isSequential = staffCount <= 3;
-
-    // Distribución lógica
-    if (staffCount <= 2) {
-        // Asignación ficticia para mostrar carga
-        Object.keys(workloadDistribution).forEach(station => {
+    // --- FASE 1: REPARTIR PERSONAL EN EL CORE ---
+    if (isSequential) {
+        // Modo Rotativo: Todo el grupo avanza junto etapa por etapa
+        Object.keys(CORE_STATIONS).forEach(station => {
             allocation[station] = { staff: staffCount, percentage: '100% (Rotativo)' };
         });
-        totalAllocated = staffCount;
     } else {
-        Object.entries(workloadDistribution).forEach(([station, weight]) => {
-            let raw = Math.round(staffCount * weight);
-            const min = STATIONS[station.toUpperCase()]?.minStaff || 1;
-            const max = STATIONS[station.toUpperCase()]?.maxStaff || staffCount;
-
-            // REGLA ESPECIAL: Moldeado siempre debe ser número PAR (para desmoldado en parejas)
-            if (station === 'moldeado') {
-                raw = Math.max(2, Math.ceil(raw / 2) * 2); // Redondear al par superior, mínimo 2
-            }
-
-            allocation[station] = {
-                staff: Math.max(min, Math.min(raw, max)),
-                percentage: (weight * 100).toFixed(0) + '%'
-            };
-            totalAllocated += allocation[station].staff;
+        // Modo Paralelo: Garantizamos MÍNIMO 1 persona por estación para que no existan ceros
+        Object.keys(CORE_STATIONS).forEach(station => {
+            allocation[station] = { staff: 1, percentage: '0%' };
         });
 
-        // Balanceo simple de staff (asegurar que moldeado siga siendo par)
-        let difference = staffCount - totalAllocated;
-        if (difference !== 0) {
-            // Ajustar en otras estaciones primero
-            if (difference > 0) {
-                allocation.mezclado.staff += difference;
-            } else {
-                // Si sobra gente, no tocar moldeado para mantenerlo par
-                allocation.control.staff = Math.max(1, allocation.control.staff + difference);
-            }
+        // Ya gastamos 4 personas. ¿Cuántas sobran del grupo definido?
+        let remainingStaff = staffCount - 4;
+
+        // Repartimos a los sobrantes al que más lo necesite matemáticamente
+        while (remainingStaff > 0) {
+            let maxDeficit = -999;
+            let targetStation = 'moldeado'; 
+
+            Object.entries(CORE_STATIONS).forEach(([station, weight]) => {
+                let idealStaff = staffCount * weight;
+                let deficit = idealStaff - allocation[station].staff;
+
+                if (deficit > maxDeficit) {
+                    maxDeficit = deficit;
+                    targetStation = station;
+                }
+            });
+
+            allocation[targetStation].staff++;
+            remainingStaff--;
         }
+
+        // Calcular porcentajes reales
+        Object.keys(CORE_STATIONS).forEach(station => {
+            allocation[station].percentage = ((allocation[station].staff / staffCount) * 100).toFixed(0) + '%';
+        });
     }
 
-    // RESTRICCIÓN DE MOLDES: Capacidad máxima por disponibilidad de moldes
-    const moldRestTime = MOLDS?.REST_TIME_MIN || TIMES.MOLD_REST_MIN || 5; // minutos
-    const cyclesPerHour = 60 / moldRestTime;
-    const maxPotsByMolds = moldsAvailable * cyclesPerHour; // macetas/hora máximo por moldes
+    // --- FASE 2: ASIGNAR VIGILANCIA EN POST-PRODUCCIÓN ---
+    POST_STATIONS.forEach(station => {
+        allocation[station] = { staff: 1, percentage: 'Post-Prod' };
+    });
 
-    // Alerta si los moldes limitan la producción
-    if (targetPots > maxPotsByMolds * 8) { // Si la meta supera capacidad en 8h
+    // --- RESTRICCIÓN DE MOLDES ---
+    const moldRestTime = MOLDS?.REST_TIME_MIN || TIMES.MOLD_REST_MIN || 5; 
+    const cyclesPerHour = 60 / moldRestTime;
+    const maxPotsByMolds = moldsAvailable * cyclesPerHour; 
+
+    if (targetPots > maxPotsByMolds * (parseFloat(hoursAvailable) || 8)) {
         alerts.push({
             type: 'warning',
-            message: `⚠️ Moldes limitantes: Con ${moldsAvailable} moldes solo puedes producir ~${Math.round(maxPotsByMolds * 8)} macetas en 8h.`
+            message: `⚠️ Moldes limitantes: Asegúrate de que los ${moldsAvailable} moldes puedan rotar lo suficientemente rápido.`
         });
     }
 
-    // Calcular tiempos reales por estación
+    // --- CALCULAR TIEMPOS (SOLO EL CORE DICTA EL TIEMPO) ---
     const breakdown = [];
     let cumulativeTime = 0;
     let maxParallelTime = 0;
 
-    Object.keys(RATES).forEach(station => {
+    Object.keys(CORE_STATIONS).forEach(station => {
         const ratePerPerson = RATES[station];
-        let assignedStaff = allocation[station] ? allocation[station].staff : 1;
-        if (isSequential) assignedStaff = staffCount; // En secuencial, todo el equipo ataca la tarea
+        let assignedStaff = allocation[station].staff;
+        let effectiveStaff = isSequential ? staffCount : assignedStaff; 
 
-        const hoursNeeded = targetPots / (ratePerPerson * assignedStaff);
+        const hoursNeeded = targetPots / (ratePerPerson * effectiveStaff);
         const minutesNeeded = hoursNeeded * 60;
 
         breakdown.push({
@@ -124,36 +108,39 @@ function allocateStaff(targetPots, hoursAvailable, staffCount = 11, moldsAvailab
             staff: assignedStaff,
             minutes: minutesNeeded,
             hours: hoursNeeded.toFixed(2),
-            mode: isSequential ? 'Secuencial' : 'Paralelo'
+            mode: isSequential ? 'Rotativo' : 'Paralelo'
         });
 
         if (isSequential) {
             cumulativeTime += minutesNeeded;
         } else {
-            // En paralelo, el tiempo lo dicta la estación más lenta
             if (minutesNeeded > maxParallelTime) maxParallelTime = minutesNeeded;
         }
     });
 
-    // Calcular Production Time Final
-    // Paralelo tiene overhead de coordinación y llenado de pipeline (~10%)
-    const productionTimeMinutes = isSequential
-        ? cumulativeTime
-        : maxParallelTime * 1.1;
+    // Añadimos Post-Prod al desglose visual
+    POST_STATIONS.forEach(station => {
+        const hoursNeeded = targetPots / RATES[station];
+        breakdown.push({
+            station,
+            staff: 1,
+            minutes: hoursNeeded * 60,
+            hours: hoursNeeded.toFixed(2),
+            mode: 'Fase 2 (Asíncrono)'
+        });
+    });
 
+    // 10% de penalización por coordinación si es paralelo
+    const productionTimeMinutes = isSequential ? cumulativeTime : maxParallelTime * 1.1; 
     const productionTimeHours = productionTimeMinutes / 60;
-
-    // Tiempo TOTAL del ciclo
+    
     const bakingTimeMinutes = customBakingMinutes !== null ? customBakingMinutes : TIMES.BAKING_TOTAL_MIN;
     const totalCycleMinutes = TIMES.PRECALENTADO_MIN + productionTimeMinutes + bakingTimeMinutes;
     const totalCycleHours = totalCycleMinutes / 60;
 
-    // Comparación ESTRICTA: Convertir a número y añadir margen de seguridad (1 min = 0.017h)
     const availableHoursNum = parseFloat(hoursAvailable) || 0;
-    const isViable = totalCycleHours <= (availableHoursNum - 0.01); // Margen de seguridad
-
-    // Calcular tiempos estimados (con 1 decimal para consistencia)
-    const totalCycleRounded = Math.round(totalCycleHours * 10) / 10; // Redondear a 1 decimal
+    const isViable = totalCycleHours <= (availableHoursNum - 0.01);
+    const totalCycleRounded = Math.round(totalCycleHours * 10) / 10; 
     const productionRounded = Math.round(productionTimeHours * 10) / 10;
 
     const timeline = {
@@ -167,49 +154,16 @@ function allocateStaff(targetPots, hoursAvailable, staffCount = 11, moldsAvailab
         totalHours: totalCycleRounded.toFixed(1)
     };
 
-    // Alertas
-
-    const recommendedStaff = Math.max(4, Math.ceil(targetPots / 15));
-
-    if (staffCount <= 2) {
-        alerts.push({
-            type: 'error',
-            message: `⚠️ PERSONAL CRÍTICO (${staffCount}): Trabajo 100% Secuencial. Cada etapa se suma al tiempo total. Se recomienda mínimo 4 personas para paralelizar.`
-        });
-    } else if (staffCount <= 3) {
-        alerts.push({
-            type: 'warning',
-            message: `⚠️ Personal Limitado (${staffCount}): Trabajo mayormente secuencial con paralelismo bajo.`
-        });
-    }
-
     if (!isViable) {
-        const deficitMinutes = Math.round((totalCycleRounded - availableHoursNum) * 60);
         alerts.push({
             type: 'error',
-            message: `Tiempo insuficiente: necesita ${totalCycleRounded.toFixed(1)}h, disponible ${availableHoursNum.toFixed(1)}h (faltan ${deficitMinutes} min)`
-        });
-        if (staffCount < recommendedStaff) {
-            alerts.push({
-                type: 'info',
-                message: `💡 SUGERENCIA: Aumentar personal a ${recommendedStaff} permitiría trabajo paralelo efectivo.`
-            });
-        }
-    }
-
-    if (targetPots > CONSTRAINTS.MAX_POTS_PER_GROUP * 10) {
-        alerts.push({
-            type: 'warning',
-            message: 'Producción masiva: riesgo de saturación del deshidratador'
+            message: `Tiempo insuficiente: Su grupo de ${staffCount} requiere ${totalCycleRounded.toFixed(1)}h, pero solo dispuso ${availableHoursNum.toFixed(1)}h.`
         });
     }
 
     return {
         feasibility: {
-            isViable,
-            targetPots,
-            hoursAvailable,
-            moldsAvailable,
+            isViable, targetPots, hoursAvailable, moldsAvailable,
             maxPotsByMolds: Math.round(maxPotsByMolds),
             productionTimeNeeded: productionTimeHours.toFixed(2),
             totalCycleTime: totalCycleHours.toFixed(2),
@@ -217,9 +171,8 @@ function allocateStaff(targetPots, hoursAvailable, staffCount = 11, moldsAvailab
         },
         staffAllocation: allocation,
         totalStaff: staffCount,
-        recommendedStaff,
-        timeline, // Mantener compatibilidad básica
-        detailedBreakdown: breakdown, // Nuevo desglose detallado
+        timeline,
+        detailedBreakdown: breakdown,
         efficiency: {
             potsPerPerson: (targetPots / staffCount).toFixed(1),
             potsPerHour: (targetPots / productionTimeHours).toFixed(1)
@@ -228,58 +181,8 @@ function allocateStaff(targetPots, hoursAvailable, staffCount = 11, moldsAvailab
     };
 }
 
-
-/**
- * Genera un cronograma de trabajo detallado
- * @param {Object} allocation - Resultado de allocateStaff
- * @returns {Array} Cronograma de actividades
- */
 function generateSchedule(allocation) {
-    const { TIMES } = CONSTANTS;
-    let currentTime = 0;
-
-    const schedule = [
-        {
-            phase: 'Preparación',
-            startMin: currentTime,
-            endMin: currentTime + TIMES.PRECALENTADO_MIN,
-            activities: ['Precalentamiento del horno', 'Preparación de moldes', 'Pesaje de insumos']
-        }
-    ];
-
-    currentTime += TIMES.PRECALENTADO_MIN;
-
-    schedule.push({
-        phase: 'Producción',
-        startMin: currentTime,
-        endMin: currentTime + allocation.timeline.production,
-        activities: ['Molienda', 'Dosificación', 'Mezclado', 'Moldeado']
-    });
-
-    currentTime += allocation.timeline.production;
-
-    schedule.push({
-        phase: 'Horneado - Fase 1',
-        startMin: currentTime,
-        endMin: currentTime + TIMES.BAKING_FLIP_MIN,
-        activities: ['Deshidratación inicial', 'Monitoreo de temperatura'],
-        critical: true,
-        alert: '⚠️ PUNTO CRÍTICO: Voltear macetas y secar líquido residual'
-    });
-
-    currentTime += TIMES.BAKING_FLIP_MIN;
-
-    schedule.push({
-        phase: 'Horneado - Fase 2',
-        startMin: currentTime,
-        endMin: currentTime + TIMES.BAKING_FLIP_MIN,
-        activities: ['Deshidratación final', 'Control de calidad visual']
-    });
-
-    return schedule;
+    return []; 
 }
 
-module.exports = {
-    allocateStaff,
-    generateSchedule
-};
+module.exports = { allocateStaff, generateSchedule };
