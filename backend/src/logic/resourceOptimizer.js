@@ -1,40 +1,48 @@
 /**
- * EcoLlajta Smart-Twin - Planificador Físico (Lógica de Línea Simultánea)
+ * EcoLlajta Smart-Twin - Predicciones Matemáticas (Punto Cero)
  */
+function calculateOptimalResources(targetPots, hoursAvailable, grindGrams = 4800, grindMins = 45) {
+    const Q = parseInt(targetPots) || 0;
+    const hours = parseFloat(hoursAvailable) || 0;
+    const T = hours * 60;
 
-function calculateOptimalResources(targetPots, hoursAvailable, grindGrams = 1000, grindMins = 20) {
-    const timeLimit = parseFloat(hoursAvailable) > 0 ? parseFloat(hoursAvailable) : 8;
-    const ratePerHourPerStation = 15;
-    const requiredPotsPerHour = targetPots / timeLimit;
-    const stationsNeeded = Math.max(1, Math.ceil(requiredPotsPerHour / ratePerHourPerStation));
+    if (Q === 0 || T === 0) return null;
 
-    // Herramientas físicas por estación
-    const molds = Math.max(2, stationsNeeded * 2); 
-    const bowls = stationsNeeded;
-    const scales = stationsNeeded;
+    // 1. Takt Time (Ritmo exigido)
+    const taktTime = T / Q;
 
-    // --- NUEVA LÓGICA DE MOLINOS ---
-    const totalEggshellGrams = targetPots * 168; 
-    const ratePerMin = (parseFloat(grindGrams) || 1000) / (parseFloat(grindMins) || 20);
-    const capacityPerGrinder = ratePerMin * (timeLimit * 60); // Usa el tiempo global en minutos
-    const grindersNeeded = Math.ceil(totalEggshellGrams / capacityPerGrinder);
+    // 2. Mezcladores (TM = 3 min)
+    const mixers = Math.max(1, Math.ceil(3 / taktTime));
 
-    const realProductionHours = targetPots / (stationsNeeded * ratePerHourPerStation);
+    // 3. Moldes Óptimos (TS = 5 min -> 3 moldes por persona)
+    const molds = mixers * 3;
+
+    // 4. Molienda
+    const totalGrams = Q * 168;
+    const capacityPerGrinder = (grindGrams / grindMins) * T;
+    const grinders = Math.max(1, Math.ceil(totalGrams / (capacityPerGrinder || 1)));
+
+    // 5. Personal Total (Molienda + 1 Pesaje + Mezcladores + 1 Desmolde)
+    const totalStaff = grinders + 1 + mixers + 1;
+
+    // 6. Tiempo Real Proyectado
+    const tcReal = Math.max(3 / mixers, 5 / molds);
+    const realProductionHours = (9 + (Q - 1) * tcReal) / 60;
 
     return {
-        targetPots,
-        timeLimit,
+        targetPots: Q,
+        totalStaff: totalStaff, // Este dato viajará directo al slider
         tools: {
-            stations: stationsNeeded,
-            molds,
-            bowls,
-            scales,
-            grinders: Math.max(1, grindersNeeded) // Mínimo 1 molino siempre
+            molds: molds,       // Este dato viajará directo al slider
+            bowls: mixers,
+            scales: 1,
+            grinders: grinders
         },
         time: {
-            realHours: realProductionHours.toFixed(2),
-            cycleMin: 8,
-            potsPerCycle: 2
+            realHours: realProductionHours.toFixed(2)
+        },
+        stats: {
+            bottleneck: (3/mixers) >= (5/molds) ? "Personal (Mezcla)" : "Equipo (Moldes)"
         }
     };
 }

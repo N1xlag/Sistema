@@ -114,9 +114,13 @@ router.post('/tray', (req, res) => {
  * POST /api/simulate/full
  * Simulación completa del ciclo productivo
  */
+/**
+ * POST /api/simulate/full
+ * Simulación completa del ciclo productivo
+ */
 router.post('/full', (req, res) => {
     try {
-        const { targetPots, hoursAvailable, staffCount, maximizeTrays, traysAvailable, moldsAvailable, traySpacing, optimizationMode } = req.body;
+        const { targetPots, hoursAvailable, staffCount, maximizeTrays, traysAvailable, moldsAvailable, traySpacing, optimizationMode, grindGrams, grindMins } = req.body;
 
         if (!targetPots || !hoursAvailable) {
             return res.status(400).json({
@@ -124,73 +128,87 @@ router.post('/full', (req, res) => {
             });
         }
 
-        // Ejecutar todos los cálculos
-        // Ejecutar cálculos en orden: primero Tray para saber tiempos de horno
-        const dosage = calculateDosage(parseInt(targetPots));
+        const pots = parseInt(targetPots);
+        const hours = parseFloat(hoursAvailable);
+        const staff = parseInt(staffCount) || 11;
+        
+        // 1. Ejecutar cálculos de dependencias
+        const dosage = calculateDosage(pots);
 
         const tray = optimizeTrayDistribution(
-            parseInt(targetPots),
+            pots,
             Boolean(maximizeTrays),
             parseInt(traysAvailable) || 4,
             parseInt(traySpacing) || 2,
             optimizationMode || 'balanced'
         );
 
-        // Obtener tiempo total de horneado en minutos (del resultado de tray o default 240)
         const totalBakingMinutes = (tray.bakingInfo?.totalBakingHours || 4) * 60;
 
-        const staff = allocateStaff(
-            parseInt(targetPots),
-            parseFloat(hoursAvailable),
-            parseInt(staffCount) || 11,
+        const staffAlloc = allocateStaff(
+            pots,
+            hours,
+            staff,
             parseInt(moldsAvailable) || 5,
-            totalBakingMinutes
+            totalBakingMinutes,
+            parseFloat(grindGrams) || 4800,
+            parseFloat(grindMins) || 45
         );
-        const schedule = generateSchedule(staff);
+        
+        const schedule = generateSchedule(staffAlloc);
 
-        // Recopilar TODAS las alertas
+        // 2. CÁLCULO ESTRICTO DE EQUIPOS PARA EL RESUMEN
+        const T = hours * 60;
+        const gCapacity = ((parseFloat(grindGrams) || 4800) / (parseFloat(grindMins) || 45)) * T;
+        const grindersNeeded = Math.max(1, Math.ceil((pots * 168) / (gCapacity || 1)));
+        
+        // Regla: Mezcladores = Personal Total - Molineros - 1 Pesador - 1 Desmoldador
+        const mixersCount = Math.max(1, staff - grindersNeeded - 2);
+
+        // Creamos el objeto tools que el frontend necesita para dibujar la tarjeta
+        const tools = {
+            molds: parseInt(moldsAvailable) || 5,
+            bowls: mixersCount, // 1 Bowl por cada persona mezclando
+            scales: 1,
+            grinders: grindersNeeded
+        };
+
+        // 3. Recopilar Alertas
         const allAlerts = [
             ...dosage.alerts,
-            ...staff.alerts
+            ...staffAlloc.alerts
         ];
 
-        // Si el tray tiene alertas, agregarlas
         if (tray.alerts && tray.alerts.length > 0) {
             allAlerts.push(...tray.alerts);
         }
 
-        // Si el tray falló por capacidad, agregar como alerta de error
         if (!tray.success && tray.error) {
-            allAlerts.push({
-                type: 'error',
-                message: tray.error
-            });
+            allAlerts.push({ type: 'error', message: tray.error });
             if (tray.recommendation) {
-                allAlerts.push({
-                    type: 'info',
-                    message: tray.recommendation
-                });
+                allAlerts.push({ type: 'info', message: tray.recommendation });
             }
         }
 
-        // Determinar viabilidad general
-        const isOverallViable = staff.feasibility.isViable && tray.success;
+        const isOverallViable = staffAlloc.feasibility.isViable && tray.success;
 
+        // 4. Enviar Respuesta Completa
         res.json({
             simulation: {
-                targetPots: parseInt(targetPots),
-                hoursAvailable: parseFloat(hoursAvailable),
+                targetPots: pots,
+                hoursAvailable: hours,
                 timestamp: new Date().toISOString()
             },
             dosage,
-            staffAllocation: staff,
+            staffAllocation: staffAlloc,
             schedule,
             trayDistribution: tray,
+            tools, // <--- INYECTAMOS LAS HERRAMIENTAS AQUÍ
             summary: {
                 isViable: isOverallViable,
                 viabilityReason: !isOverallViable
-                    ? (!staff.feasibility.isViable
-                        ? `Tiempo insuficiente: necesita ${staff.feasibility.totalCycleTime}h, disponible ${hoursAvailable}h`
+                    ? (!staffAlloc.feasibility.isViable
+                        ? `Tiempo insuficiente: necesita ${staffAlloc.feasibility.totalCycleTime}h, disponible ${hoursAvailable}h`
                         : tray.error || 'Capacidad del deshidratador excedida')
                     : 'Producción viable',
                 totalAlerts: allAlerts

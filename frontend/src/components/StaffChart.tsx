@@ -5,11 +5,12 @@ import { StaffAllocation, BreakdownItem } from '@/types';
 interface StaffChartProps {
     allocation: StaffAllocation;
     totalStaff: number;
-    timeline?: {
-        production: number; // minutos
-        baking?: number;    // minutos
-        totalHours: string;
-    };
+    timeline: {
+    setupHours: string;
+    productionHours: string;
+    bakingHours: string;
+    totalHours: string;
+    }
     efficiency?: {
         potsPerHour: string;
         potsPerPerson: string;
@@ -48,11 +49,11 @@ const stationExplanations: Record<string, { role: string; reason: string }> = {
     },
     mezclado: {
         role: 'Mezcla de ingredientes',
-        reason: 'Proceso continuo. Requiere 2-3 personas para mezclar manualmente la pasta mientras se mantiene la consistencia.'
+        reason: 'Proceso continuo. Requiere 1 persona para mezclar manualmente la pasta mientras se mantiene la consistencia.'
     },
     moldeado: {
         role: 'Formado de macetas',
-        reason: 'CUELLO DE BOTELLA: Es el proceso más lento y manual. Se concentra el mayor personal aquí para maximizar producción.'
+        reason: 'Tarea rápida de desmolde y limpieza de moldes base.'
     },
     horneado: {
         role: 'Deshidratación',
@@ -113,9 +114,7 @@ export default function StaffChart({ allocation, totalStaff, timeline, efficienc
                                         <span className="font-bold capitalize text-[var(--text-primary)]">
                                             {station}
                                         </span>
-                                        {isCritical && (
-                                            <span className="badge badge-warning text-xs">CUELLO DE BOTELLA</span>
-                                        )}
+                                        
                                     </div>
                                     {explanation && (
                                         <p className="text-xs text-[var(--text-muted)] ml-8">
@@ -192,7 +191,7 @@ export default function StaffChart({ allocation, totalStaff, timeline, efficienc
                             <div className={`p-3 rounded border ${totalStaff <= 3 ? 'border-dashed border-amber-500/30 bg-amber-500/5' : 'border-green-500/30 bg-green-500/5'}`}>
                                 <div className="text-xs font-bold uppercase mb-2 tracking-wide flex justify-between">
                                     <span>Fase de Producción ({targetPots} macetas)</span>
-                                    <span>{(timeline.production).toFixed(0)} min total</span>
+                                    <span>{(parseFloat(timeline?.productionHours || "0") * 60).toFixed(0)} min total</span>
                                 </div>
 
                                 {totalStaff <= 3 ? (
@@ -267,8 +266,7 @@ export default function StaffChart({ allocation, totalStaff, timeline, efficienc
                                         </div>
 
                                         <div className="text-xs text-right mt-6 pt-3 text-emerald-600 dark:text-emerald-400 font-bold border-t border-dashed border-emerald-500/30 flex justify-end gap-2 items-center">
-                                            <span>⏱️ Máximo ({Math.ceil(Math.max(...detailedBreakdown.filter(i => i.station !== 'horneado').map(i => i.minutes)))} min) + 10% Coord. = {(timeline.production).toFixed(0)} min Total</span>
-                                        </div>
+                                        <span>⏱️ Máximo ({Math.ceil(Math.max(...detailedBreakdown.filter(i => i.station !== 'horneado').map(i => i.minutes)))} min) + 10% Coord. = {(parseFloat(timeline?.productionHours || "0") * 60).toFixed(0)} min Total</span>                                        </div>
                                     </div>
                                 )}
                             </div>
@@ -276,7 +274,7 @@ export default function StaffChart({ allocation, totalStaff, timeline, efficienc
                             {/* Horneado */}
                             <div className="flex justify-between items-center text-sm p-2 rounded bg-amber-500/10 border-l-4 border-amber-500">
                                 <span>⏲️ Horneado (No depende de staff)</span>
-                                <span className="font-mono font-bold">{timeline.baking || 240} min</span>
+                                <span className="font-mono font-bold">{(parseFloat(timeline?.bakingHours || "4") * 60).toFixed(0)} min</span>
                             </div>
 
                             <div className="pt-2 mt-2 border-t border-blue-500/20 flex justify-between items-center font-bold">

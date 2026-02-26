@@ -32,8 +32,8 @@ export default function Home() {
     traySpacing: 2,
     optimizationMode: 'balanced',
     rendimientoHumano: 1.0,
-    grindGrams: 1000, // <--- NUEVO
-    grindMins: 20,    // <--- NUEVO
+    grindGrams: 4800, // <--- NUEVO
+    grindMins: 45,    // <--- NUEVO
   });
 
   const [optimization, setOptimization] = useState<OptimalResourcesResult | null>(null);
@@ -60,31 +60,34 @@ export default function Home() {
   const handleSimulate = useCallback(async () => {
     setLoading(true);
     try {
-      // 1. Primero le preguntamos al "Cerebro Planificador" qué necesitamos físicamente
-      // 1. Primero le preguntamos al "Cerebro Planificador" qué necesitamos físicamente
-      const opt = await getOptimization(params.targetPots, params.hoursAvailable, params.grindGrams, params.grindMins);
-      
-      // 2. AUTO-APLICAMOS esas recomendaciones al Panel de Control en vivo
-      const optimizedParams = {
-        ...params,
-        moldsAvailable: opt.tools.molds,
-        // Garantizamos mínimo 4 personas por estación de trabajo para que la fábrica no colapse
-        staffCount: Math.max(params.staffCount, opt.tools.stations * 4)
-      };
-      
-      setParams(optimizedParams); // Se mueven los sliders solitos
-
-      // 3. Corremos la simulación completa usando los datos ya optimizados
-      const data = await runFullSimulation(optimizedParams);
-      
-      setResult(data);
+      // 1. Obtenemos la matemática pura (Solo para mostrarla, ya no la aplicamos a la fuerza)
+      const opt = await getOptimization(
+        params.targetPots, 
+        params.hoursAvailable, 
+        params.grindGrams, 
+        params.grindMins
+      );
       setOptimization(opt);
+
+      // 2. Ejecutamos la simulación CON LOS DATOS EXACTOS DE TUS SLIDERS
+      const data = await runFullSimulation(params);
+      setResult(data);
       
     } catch (error) {
-      console.error("Error operativo:", error);
+      console.error("Error en la simulación:", error);
     }
     setLoading(false);
   }, [params]);
+
+  const handleApplySuggested = useCallback(() => {
+    if (optimization) {
+      setParams(prev => ({
+        ...prev,
+        staffCount: optimization.totalStaff, // Aquí usamos el total calculado por el backend
+        moldsAvailable: optimization.tools.molds
+      }));
+    }
+  }, [optimization]);
 
   // Tabs
   const tabs = [
@@ -872,7 +875,7 @@ export default function Home() {
 
         {/* Optimal Planner Tab */}
         {activeTab === "optimal" && optimization && (
-          <OptimizationPanel data={optimization} />
+          <OptimizationPanel data={optimization} params={params} onApply={handleApplySuggested}/>
         )}
 
         {activeTab === "optimal" && !optimization && (

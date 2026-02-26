@@ -74,10 +74,9 @@ export interface StaffAllocation {
 }
 
 export interface Timeline {
-    setup: number;
-    production: number;
-    baking: number;
-    totalMinutes: number;
+    setupHours: string;
+    productionHours: string;
+    bakingHours: string;
     totalHours: string;
 }
 
@@ -218,17 +217,18 @@ export interface SimulationParams {
 
 export interface OptimalResourcesResult {
     targetPots: number;
-    timeLimit: number;
+    timeLimit: string;
+    totalStaff: number; // <--- ¡Esta es la línea mágica que falta!
     tools: {
-        stations: number;
         molds: number;
         bowls: number;
         scales: number;
         grinders: number;
     };
+    stats: {
+        bottleneck: string;
+    };
     time: {
         realHours: string;
-        cycleMin: number;
-        potsPerCycle: number;
     };
 }
